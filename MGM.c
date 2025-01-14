@@ -76,6 +76,79 @@ void increment_in_big_endian(uint64_t *num) {
     *num = to_big_endian(big_endian);
 }
 
+void MGM_decrypt(uint8_t *key, uint8_t *nonce, uint8_t *P, uint8_t *C, uint8_t *A, int C_len, int A_len, uint8_t *res_T,
+                 int T_len) {
+    // Итерационные ключи
+    chunk round_keys[10] = {};
+    // Генерация итерационных ключей
+    gen_round_keys(key, round_keys);
+    chunk Y, Z, H, T, G; //G - gamma for encryption
+    chunk P_last = {0}, A_last = {0}, C_last = {0};
+    T[0] = 0;
+    T[1] = 0;
+    int i;
+    int h, q;
+    if (A_len % BLOCK_SIZE) {
+        h = A_len / BLOCK_SIZE + 1;
+        memcpy(A_last, A + (h - 1) * BLOCK_SIZE, A_len % BLOCK_SIZE);
+    } else {
+        h = A_len / BLOCK_SIZE;
+        memcpy(A_last, A + (h - 1) * BLOCK_SIZE, BLOCK_SIZE);
+    }
+    if (C_len % BLOCK_SIZE) {
+        q = C_len / BLOCK_SIZE + 1;
+        memcpy(C_last, C + (q - 1) * BLOCK_SIZE, C_len % BLOCK_SIZE);
+    } else {
+        q = C_len / BLOCK_SIZE;
+        memcpy(C_last, C + (q - 1) * BLOCK_SIZE, BLOCK_SIZE);
+    }
+    nonce[0] &= 0x7F;
+    kuznechik_encrypt(round_keys, (void *) nonce, Y);
+    nonce[0] |= 0x80;
+    kuznechik_encrypt(round_keys, (void *) nonce, Z);
+    for (i = 0; i < h; ++i) {
+        kuznechik_encrypt(round_keys, (void *) Z, H);
+        increment_in_big_endian(&Z[0]);
+        if (i == h - 1)
+            GF_mult128_chunk(H, A_last, H);
+        else
+            GF_mult128_chunk(H, (void *) A + i * BLOCK_SIZE, H);
+        X(T, H, T);
+    }
+    for (i = 0; i < q; ++i) {
+        kuznechik_encrypt(round_keys, (void *) Z, H);
+        increment_in_big_endian(&Z[0]);
+        if (i == q - 1)
+            GF_mult128_chunk(H, C_last, H);
+        else
+            GF_mult128_chunk(H, (void *) C + i * BLOCK_SIZE, H);
+        X(T, H, T);
+    }
+    kuznechik_encrypt(round_keys, (void *) Z, H);
+    G[0] = to_big_endian(A_len * 8);
+    G[1] = to_big_endian(C_len * 8);
+    GF_mult128_chunk(H, G, H);
+    X(T, H, T);
+    kuznechik_encrypt(round_keys, T, T);
+    if (memcmp(T, res_T, T_len) != 0) {
+        printf("Error T is not correct\n");
+        return;
+    }
+    for (i = 0; i < q; ++i) {
+        kuznechik_encrypt(round_keys, (void *) Y, G);
+        if (i == q - 1) {
+            memcpy(C_last, G, C_len % BLOCK_SIZE);
+            X(P_last, C_last, P_last);
+            memcpy((void *) P + i * BLOCK_SIZE, P_last, C_len % BLOCK_SIZE);
+        } else {
+            increment_in_big_endian(&Y[1]);
+            X((void *) C + i * BLOCK_SIZE, G, (void *) P + i * BLOCK_SIZE);
+        }
+    }
+}
+
+
+
 void MGM_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *P, uint8_t *C, uint8_t *A, int P_len, int A_len, uint8_t *res_T,
                  int T_len) {
     // Итерационные ключи
@@ -131,7 +204,6 @@ void MGM_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *P, uint8_t *C, uint8_t *
         }
         X(T, H, T);
     }
-    gen_round_keys(key, round_keys);
     kuznechik_encrypt(round_keys, (void *) Z, H);
     G[0] = to_big_endian(A_len * 8);
     G[1] = to_big_endian(P_len * 8);
@@ -141,13 +213,43 @@ void MGM_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *P, uint8_t *C, uint8_t *
     memcpy(res_T, T, T_len);
 }
 
-int main() {
+void tests() {
     uint8_t key[] = {
         0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
         0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
     };
+    chunk round_keys[10] = {};
+    gen_round_keys(key, round_keys);
+    uint8_t data[KUZNECHIK_BLOCK_SIZE] = {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x00,
+        0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88
+    };
+    printf("Plain text:\n");
+    print_chunk((void *) data);
+    chunk encrypted;
+    memcpy(encrypted, data, sizeof(chunk));
+    int enc_dec_times = 100000;
+    clock_t start_time = clock();
+    for (int i = 0; i < enc_dec_times; i++) {
+        kuznechik_encrypt(round_keys, (void *) encrypted, encrypted);
+    }
+    clock_t end_time = clock();
+    double elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
+    printf("Encoded text:\n");
+    print_chunk(encrypted);
+    printf("Encryption speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    start_time = clock();
+    for (int i = 0; i < enc_dec_times; i++) {
+        kuznechik_decrypt(round_keys, (void *) encrypted, encrypted);
+    }
+    end_time = clock();
+    elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
+    printf("Decoded text:\n");
+    print_chunk(encrypted);
+    printf("Decryption speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+
     uint8_t nonce[] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88
     };
@@ -174,4 +276,12 @@ int main() {
     uint8_t test_chunk2[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
     chunk res;
     GF_mult128_chunk(test_chunk1, test_chunk2, res);
+    MGM_decrypt(key, nonce, P, C, A, sizeof(C), sizeof(A), T, sizeof(T));
+    printf("\nPlaintext:\n");
+    print(P, sizeof(P));
+}
+
+
+int main() {
+    tests();
 }
