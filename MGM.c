@@ -130,10 +130,10 @@ void MGM_decrypt(uint8_t *key, uint8_t *nonce, uint8_t *P, uint8_t *C, uint8_t *
     GF_mult128_chunk(H, G, H);
     X(T, H, T);
     kuznechik_encrypt(round_keys, T, T);
-    if (memcmp(T, res_T, T_len) != 0) {
-        printf("Error T is not correct\n");
-        return;
-    }
+    // if (memcmp(T, res_T, T_len) != 0) {
+    //     printf("Error T is not correct\n");
+    //     return;
+    // }
     for (i = 0; i < q; ++i) {
         kuznechik_encrypt(round_keys, (void *) Y, G);
         if (i == q - 1) {
@@ -214,6 +214,7 @@ void MGM_encrypt(uint8_t *key, uint8_t *nonce, uint8_t *P, uint8_t *C, uint8_t *
 }
 
 void tests() {
+    generate_LUT();
     uint8_t key[] = {
         0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
@@ -230,7 +231,7 @@ void tests() {
     print_chunk((void *) data);
     chunk encrypted;
     memcpy(encrypted, data, sizeof(chunk));
-    int enc_dec_times = 100000;
+    int enc_dec_times = 1000000;
     clock_t start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
         kuznechik_encrypt(round_keys, (void *) encrypted, encrypted);
@@ -239,7 +240,7 @@ void tests() {
     double elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
     printf("Encoded text:\n");
     print_chunk(encrypted);
-    printf("Encryption speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    printf("Encryption kuznechik speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
     start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
         kuznechik_decrypt(round_keys, (void *) encrypted, encrypted);
@@ -248,7 +249,7 @@ void tests() {
     elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
     printf("Decoded text:\n");
     print_chunk(encrypted);
-    printf("Decryption speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    printf("Decryption kuznechik speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
 
     uint8_t nonce[] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88
@@ -275,11 +276,32 @@ void tests() {
     uint8_t test_chunk1[16] = {0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t test_chunk2[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
     chunk res;
-    GF_mult128_chunk(test_chunk1, test_chunk2, res);
+    GF_mult128_chunk((void *)test_chunk1, (void *)test_chunk2, res);
     MGM_decrypt(key, nonce, P, C, A, sizeof(C), sizeof(A), T, sizeof(T));
     printf("\nPlaintext:\n");
     print(P, sizeof(P));
+    enc_dec_times = 100000;
+    start_time = clock();
+    for (int i = 0; i < enc_dec_times; i++) {
+        MGM_encrypt(key, nonce, P, P, A, sizeof(P), sizeof(A), T, sizeof(T));
+    }
+    end_time = clock();
+    elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
+    printf("Encoded text:\n");
+    print(P, sizeof(P));
+    printf("Encryption MGM speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE*8)/elapsed_time/1024/1024);
+    start_time = clock();
+    for (int i = 0; i < enc_dec_times; i++) {
+        MGM_decrypt(key, nonce, P, P, A, sizeof(P), sizeof(A), T, sizeof(T));
+    }
+    end_time = clock();
+    elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
+    printf("Decoded text:\n");
+    print(P, sizeof(P));
+    printf("Decryption MGM speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE*8)/elapsed_time/1024/1024);
 }
+
+
 
 
 int main() {

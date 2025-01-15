@@ -5,7 +5,7 @@
 // memcpy
 #include <string.h>
 #include <time.h>
-
+#define FIELD_SIZE 256
 // Длинна блока в байтах(16 байт = 128 бит)
 #define KUZNECHIK_BLOCK_SIZE 16
 
@@ -57,13 +57,88 @@ const uint8_t linear_vector[] = {
     0x94, 0x20, 0x85, 0x10, 0xC2, 0xC0, 0x01, 0xFB,
     0x01, 0xC0, 0xC2, 0x10, 0x85, 0x20, 0x94, 0x01
 };
+uint8_t LS_mat[16][256][16] = {0};
+uint8_t Mul[FIELD_SIZE][FIELD_SIZE] = {0};
 
-// Функция X 
-void X(chunk a, chunk b, chunk c) {
+// Функция умножения в поле Галуа(2^8)
+uint8_t GF_mult8(uint8_t a, uint8_t b) {
+    uint8_t c;
+
+    c = 0;
+    while (b) {
+        if (b & 1)
+            c ^= a;
+        a = (a << 1) ^ (a & 0x80 ? 0xC3 : 0x00);
+        b >>= 1;
+    }
+
+    return c;
+}
+
+void square_matrix(uint8_t *Z) {
+    uint8_t temp[16 * 16]={0};
+
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 16; j++) {
+            for (int k = 0; k < 16; k++) {
+                temp[i * 16 + j] ^= Mul[Z[i * 16 + k]][Z[k * 16 + j]];
+            }
+        }
+    }
+    memcpy(Z, temp, 16 * 16);
+}
+
+// Функция для заполнения матрицы умножения в поле Галуа
+void fill_galois_multiplication_table(uint8_t table[FIELD_SIZE][FIELD_SIZE]) {
+    for (int i = 0; i < FIELD_SIZE; i++) {
+        for (int j = 0; j < FIELD_SIZE; j++) {
+            table[i][j] = GF_mult8(i, j);
+        }
+    }
+}
+
+void generate_LUT() {
+    fill_galois_multiplication_table(Mul);
+    uint8_t Z[256] = {
+        0x94, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x85, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xC2, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xC2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    square_matrix(Z);
+    square_matrix(Z);
+    square_matrix(Z);
+    square_matrix(Z);
+    for (int i = 0; i < 16; ++i)
+        for (int b = 0; b < 256; ++b)
+            for (int k = 0; k < 16; ++k)
+                LS_mat[i][b][k] = Mul[Pi[b]] [Z[i * 16 +k]];
+}
+
+// Функция X
+void X(const chunk a, const chunk b, chunk c) {
     c[0] = a[0] ^ b[0];
     c[1] = a[1] ^ b[1];
 }
 
+void LS(uint8_t *in_out) {
+    chunk result = {0};
+    for (int i = 0; i < 16; ++i)
+        X(result, (void *)LS_mat[i][in_out[i]], result);
+    memcpy(in_out, result, sizeof(chunk));
+}
 
 
 // Функция S
@@ -84,20 +159,6 @@ void S_reverse(chunk in_out) {
     }
 }
 
-// Функция умножения в поле Галуа(2^8)
-uint8_t GF_mult8(uint8_t a, uint8_t b) {
-    uint8_t c;
-
-    c = 0;
-    while (b) {
-        if (b & 1)
-            c ^= a;
-        a = (a << 1) ^ (a & 0x80 ? 0xC3 : 0x00);
-        b >>= 1;
-    }
-
-    return c;
-}
 
 // Функция R
 void R(uint8_t *in_out) {
@@ -107,7 +168,8 @@ void R(uint8_t *in_out) {
     uint8_t *byte = (int8_t *) in_out;
     for (int i = 14; i >= 0; i--) {
         byte[i + 1] = byte[i];
-        acc ^= GF_mult8(byte[i], linear_vector[i]);
+        // acc ^= GF_mult8(byte[i], linear_vector[i]);
+        acc ^= Mul[byte[i]] [linear_vector[i]];
     }
     byte[0] = acc;
 }
@@ -121,7 +183,9 @@ void R_reverse(uint8_t *in_out) {
 
     for (int i = 0; i < 15; i++) {
         byte[i] = byte[i + 1];
-        acc ^= GF_mult8(byte[i], linear_vector[i]);
+        // acc ^= GF_mult8(byte[i], linear_vector[i]);
+        acc ^= Mul[byte[i]] [linear_vector[i]];
+
     }
 
     byte[15] = acc;
@@ -141,7 +205,7 @@ void L_reverse(uint8_t *in_out) {
 }
 
 // Генерация итерационных ключей
-void gen_round_keys(uint8_t *key, chunk *round_keys) {
+void gen_round_keys(const uint8_t *key, chunk *round_keys) {
     // Счетчик
     int i;
     // Константы
@@ -170,11 +234,12 @@ void gen_round_keys(uint8_t *key, chunk *round_keys) {
         // Преобразование X
         // (void*) для избежания предупреждений о неверном типе, передаваемом в функцию
         X(ks[0], (void *) cs[i - 1], new_key);
-        // Преобразование S
-        S(new_key);
-        // Преобразование L
-        // (uint8_t*) для избежания предупреждений о неверном типе, передаваемом в функцию
-        L((uint8_t *) &new_key);
+        LS(new_key);
+        // // Преобразование S
+        // S(new_key);
+        // // Преобразование L
+        // // (uint8_t*) для избежания предупреждений о неверном типе, передаваемом в функцию
+        // L((uint8_t *) &new_key);
         // Преобразование X
         X(new_key, ks[1], new_key);
 
@@ -206,12 +271,12 @@ void kuznechik_encrypt(chunk *round_keys, chunk in, chunk out) {
     memcpy(p, in, sizeof(chunk));
     // В течении 10 итераций
     for (int i = 0; i < 9; i++) {
-        // Преобразование X
         X(p, round_keys[i], p);
+        LS((void *)p);
         // Преобразование S
-        S(p);
-        // Преобразование L
-        L((uint8_t *) &p);
+        // S(p);
+        // // Преобразование L
+        // L((uint8_t *) &p);
     }
     // Преобразование X
     X(p, round_keys[9], p);
@@ -247,80 +312,86 @@ void print_chunk(chunk p) {
 
     printf("\n");
 }
-void print(uint8_t * p, int size) {
 
+void print(uint8_t *p, int size) {
     for (int i = 0; i < size; i++)
         printf("0x%02X ", p[i]);
 
     printf("\n");
 }
-// int main(int argc, char *argv[]) {
-//     // Ключ (256 бит = 32 байт)
+
+
+// Функция для записи массива в файл
+void write_galois_multiplication_table(const char *filename, uint8_t table[FIELD_SIZE][FIELD_SIZE]) {
+    FILE *fp = fopen(filename, "wb");
+    if (fp == NULL) {
+        perror("Ошибка при открытии файла");
+        return;
+    }
+
+    // Запись таблицы в файл
+    fwrite(table, sizeof(uint8_t), FIELD_SIZE * FIELD_SIZE, fp);
+
+    fclose(fp);
+}
+
+// Функция для чтения массива из файла
+int read_galois_multiplication_table(const char *filename, uint8_t table[FIELD_SIZE][FIELD_SIZE]) {
+    FILE *fp = fopen(filename, "rb");
+    if (fp == NULL) {
+        perror("Ошибка при открытии файла");
+        return -1; // Возврат ошибки
+    }
+
+    // Чтение данных из файла
+    size_t items_read = fread(table, sizeof(uint8_t), FIELD_SIZE * FIELD_SIZE, fp);
+    if (items_read != FIELD_SIZE * FIELD_SIZE) {
+        perror("Ошибка при чтении файла");
+        fclose(fp);
+        return -1; // Возврат ошибки
+    }
+
+    fclose(fp);
+    return 0; // Успешное завершение
+}
+
+
+// int main() {
+//     generate_LUT();
 //     uint8_t key[] = {
 //         0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
 //         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
 //         0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
 //         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
 //     };
-//
-//     // Итерационные ключи
 //     chunk round_keys[10] = {};
-//
-//     // Генерация итерационных ключей
 //     gen_round_keys(key, round_keys);
-//
-//     // Вывод итерационных ключей
-//     int i;
-//     printf("Iteration keys:\n");
-//     for (i = 0; i < 10; i++)
-//         print_chunk(round_keys[i]);
-//
-//     // Открытые данные
 //     uint8_t data[KUZNECHIK_BLOCK_SIZE] = {
 //         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x00,
 //         0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88
 //     };
-//
-//     // Вывод открытых данных
 //     printf("Plain text:\n");
-//     // (void*) для избежания предупреждений о неверном типе, передаваемом в функцию
 //     print_chunk((void *) data);
-//
-//     // Зашифрованные данные
 //     chunk encrypted;
-//
-//     // Шифрование
-//     // (void*) для избежания предупреждений о неверном типе, передаваемом в функцию
-//     // Создадим копию входных данных
 //     memcpy(encrypted, data, sizeof(chunk));
 //     int enc_dec_times = 100000;
 //     clock_t start_time = clock();
-//     for (i = 0; i < enc_dec_times; i++) {
+//     for (int i = 0; i < enc_dec_times; i++) {
 //         kuznechik_encrypt(round_keys, (void *) encrypted, encrypted);
 //     }
 //     clock_t end_time = clock();
 //     double elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
-//
-//     // Вывод зашифрованных данных
 //     printf("Encoded text:\n");
 //     print_chunk(encrypted);
-//     printf("Encryption speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+//     printf("Encryption speed: %.6f MB/sec\n", (enc_dec_times * KUZNECHIK_BLOCK_SIZE) / elapsed_time / 1024 / 1024);
 //     start_time = clock();
-//     for (i = 0; i < enc_dec_times; i++) {
+//     for (int i = 0; i < enc_dec_times; i++) {
 //         kuznechik_decrypt(round_keys, (void *) encrypted, encrypted);
 //     }
 //     end_time = clock();
 //     elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
-//     // Результат расшифровки
-//     chunk decrypted;
-//
-//     // Расшифровка
-//     // kuznechik_decrypt(round_keys, encrypted, decrypted);
-//
-//     // Вывод зашифрованных данных
 //     printf("Decoded text:\n");
 //     print_chunk(encrypted);
-//     printf("Decryption speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
-//
+//     printf("Decryption speed: %.6f MB/sec\n", (enc_dec_times * KUZNECHIK_BLOCK_SIZE) / elapsed_time / 1024 / 1024);
 //     return 0;
 // }
