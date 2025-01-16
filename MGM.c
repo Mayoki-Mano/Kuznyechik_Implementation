@@ -221,8 +221,13 @@ void tests() {
         0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
     };
-    chunk round_keys[10] = {};
+    chunk round_keys[10] = {0};
+    chunk round_keys_L_reversed[10] = {0};
     gen_round_keys(key, round_keys);
+    memcpy(round_keys_L_reversed, round_keys, sizeof(round_keys));
+    for (int i=1;i<10;++i)
+        L_reverse(round_keys_L_reversed[i]);
+    printf("\n");
     uint8_t data[KUZNECHIK_BLOCK_SIZE] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x00,
         0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88
@@ -243,7 +248,7 @@ void tests() {
     printf("Encryption kuznechik speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
     start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
-        kuznechik_decrypt(round_keys, (void *) encrypted, encrypted);
+        kuznechik_decrypt(round_keys_L_reversed, (void *) encrypted, encrypted);
     }
     end_time = clock();
     elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
