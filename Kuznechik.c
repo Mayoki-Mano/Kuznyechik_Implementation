@@ -1,16 +1,7 @@
-#include <stdio.h>
 
-// uint8_t, uint64_t
-#include <stdint.h>
-// memcpy
-#include <string.h>
-#include <time.h>
-#define FIELD_SIZE 256
-// Длинна блока в байтах(16 байт = 128 бит)
-#define KUZNECHIK_BLOCK_SIZE 16
+#include "Kuznechik.h"
 
-// Один блок (чанк) задается как массив двух беззнаковых целых по 64 бита
-typedef uint64_t chunk[2];
+
 
 // Таблица прямого нелинейного преобразования согластно ГОСТ 34.12-2015
 const uint8_t Pi[] = {
@@ -57,7 +48,9 @@ const uint8_t linear_vector[] = {
     0x94, 0x20, 0x85, 0x10, 0xC2, 0xC0, 0x01, 0xFB,
     0x01, 0xC0, 0xC2, 0x10, 0x85, 0x20, 0x94, 0x01
 };
-uint8_t LS_mat[16][256][16] = {0};
+_Alignas(16) uint8_t LS_mat[16][256][16] ={0};
+
+
 uint8_t LS_reverse_mat[16][256][16] = {0};
 uint8_t Mul[FIELD_SIZE][FIELD_SIZE] = {0};
 
@@ -264,7 +257,7 @@ void gen_round_keys(const uint8_t *key, chunk *round_keys) {
         // Преобразование X
         // (void*) для избежания предупреждений о неверном типе, передаваемом в функцию
         X(ks[0], (void *) cs[i - 1], new_key);
-        LS(new_key);
+        LS((void *) new_key);
         // // Преобразование S
         // S(new_key);
         // // Преобразование L
@@ -292,6 +285,13 @@ void gen_round_keys(const uint8_t *key, chunk *round_keys) {
     }
 }
 
+void aligned_load_array_to_L1(int *arr, size_t size) {
+    for (size_t i = 0; i < size; i++)
+        // Предполагается, что массив выровнен по границе 64 байта
+        _mm_prefetch((const char*)&arr[i], _MM_HINT_T0);  // Подгрузка в L1
+}
+
+extern void LS_asm(uint8_t *in_out);
 // Функция шифрования
 // Поддерживает запись результата в исходный массив
 void kuznechik_encrypt(chunk *round_keys, chunk in, chunk out) {
@@ -302,8 +302,8 @@ void kuznechik_encrypt(chunk *round_keys, chunk in, chunk out) {
     // В течении 10 итераций
     for (int i = 0; i < 9; i++) {
         X(p, round_keys[i], p);
-        LS((void *) p);
-        // Преобразование S
+        // LS((void *) p);
+        LS_asm((void *) p);
         // S(p);
         // // Преобразование L
         // L((uint8_t *) &p);
@@ -321,7 +321,7 @@ void kuznechik_decrypt(chunk *round_keys, chunk in, chunk out) {
     memcpy(p, in, sizeof(chunk));
     S(p);
     for (int i = 9; i > 0; --i) {
-        LS_reverse(p);
+        LS_reverse((void *) p);
         X(p, round_keys[i], p);
     }
     S_reverse(p);
@@ -345,7 +345,6 @@ void print(uint8_t *p, int size) {
     printf("\n");
 }
 
-
 // Функция для записи массива в файл
 void write_galois_multiplication_table(const char *filename, uint8_t table[FIELD_SIZE][FIELD_SIZE]) {
     FILE *fp = fopen(filename, "wb");
@@ -358,26 +357,6 @@ void write_galois_multiplication_table(const char *filename, uint8_t table[FIELD
     fwrite(table, sizeof(uint8_t), FIELD_SIZE * FIELD_SIZE, fp);
 
     fclose(fp);
-}
-
-// Функция для чтения массива из файла
-int read_galois_multiplication_table(const char *filename, uint8_t table[FIELD_SIZE][FIELD_SIZE]) {
-    FILE *fp = fopen(filename, "rb");
-    if (fp == NULL) {
-        perror("Ошибка при открытии файла");
-        return -1; // Возврат ошибки
-    }
-
-    // Чтение данных из файла
-    size_t items_read = fread(table, sizeof(uint8_t), FIELD_SIZE * FIELD_SIZE, fp);
-    if (items_read != FIELD_SIZE * FIELD_SIZE) {
-        perror("Ошибка при чтении файла");
-        fclose(fp);
-        return -1; // Возврат ошибки
-    }
-
-    fclose(fp);
-    return 0; // Успешное завершение
 }
 
 

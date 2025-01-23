@@ -2,7 +2,7 @@
 #define NONCE_SIZE 16
 #define T_SIZE 16
 #include <stdint.h>
-#include "Kuznechik.c"
+#include "Kuznechik.h"
 // Функция для преобразования числа из Little Endian в Big Endian
 uint64_t to_big_endian(uint64_t little_endian_value) {
     return ((little_endian_value >> 56) & 0xFF) |
@@ -18,6 +18,8 @@ void chunk_swap_endian(chunk p) {
     p[0]=to_big_endian(p[0]);
     p[1]=to_big_endian(p[1]);
 }
+
+
 
 // Функция умножения в поле Галуа (2^128)
 void GF_mult128_chunk(const chunk a, const chunk b, chunk result) {
@@ -226,7 +228,7 @@ void tests() {
     gen_round_keys(key, round_keys);
     memcpy(round_keys_L_reversed, round_keys, sizeof(round_keys));
     for (int i=1;i<10;++i)
-        L_reverse(round_keys_L_reversed[i]);
+        L_reverse((void *)round_keys_L_reversed[i]);
     printf("\n");
     uint8_t data[KUZNECHIK_BLOCK_SIZE] = {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x00,
@@ -236,7 +238,8 @@ void tests() {
     print_chunk((void *) data);
     chunk encrypted;
     memcpy(encrypted, data, sizeof(chunk));
-    int enc_dec_times = 1000000;
+
+    int enc_dec_times = 10000000;
     clock_t start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
         kuznechik_encrypt(round_keys, (void *) encrypted, encrypted);
