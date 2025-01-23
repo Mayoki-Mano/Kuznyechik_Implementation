@@ -35,6 +35,6 @@ void kuznechik_decrypt(chunk *round_keys, chunk in, chunk out);
 void print_chunk(chunk p);
 void print(uint8_t *p, int size);
 void aligned_load_array_to_L1(int *arr, size_t size);
-
+void test_ls();
 
 #endif //KUZNECHIK_H

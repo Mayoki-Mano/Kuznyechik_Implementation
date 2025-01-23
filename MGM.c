@@ -313,5 +313,6 @@ void tests() {
 
 
 int main() {
-    tests();
+    // tests();
+    test_ls();
 }
