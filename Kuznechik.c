@@ -292,6 +292,7 @@ void aligned_load_array_to_L1(int *arr, size_t size) {
 }
 
 extern void LS_asm(uint8_t *in_out);
+
 // Функция шифрования
 // Поддерживает запись результата в исходный массив
 void kuznechik_encrypt(chunk *round_keys, chunk in, chunk out) {
@@ -303,7 +304,7 @@ void kuznechik_encrypt(chunk *round_keys, chunk in, chunk out) {
     for (int i = 0; i < 9; i++) {
         X(p, round_keys[i], p);
         // LS((void *) p);
-        LS_asm((void *) p);
+        LS((void *) p);
         // S(p);
         // // Преобразование L
         // L((uint8_t *) &p);
@@ -399,6 +400,7 @@ void write_galois_multiplication_table(const char *filename, uint8_t table[FIELD
 //     printf("Decryption speed: %.6f MB/sec\n", (enc_dec_times * KUZNECHIK_BLOCK_SIZE) / elapsed_time / 1024 / 1024);
 //     return 0;
 // }
+extern void kyznechick_asm(chunk *round_keys, chunk in, chunk out);
 
 void test_ls() {
     generate_LUT();
@@ -427,23 +429,23 @@ void test_ls() {
     int enc_dec_times = 100000000;
     clock_t start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
-        LS(encrypted);
+        kuznechik_encrypt(round_keys, (void *) encrypted, encrypted);
     }
     clock_t end_time = clock();
     double elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
     printf("Encoded text:\n");
     print_chunk(encrypted);
-    printf("Encryption LS speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    printf("Encryption KUZNECHICK_C speed: %.6f MB/sec\n", (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
     memcpy(encrypted, data, sizeof(chunk));
     start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
-        LS_asm(encrypted);
+        kyznechick_asm(round_keys, (void *) encrypted, encrypted);
     }
     end_time = clock();
     elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
     printf("Encoded text:\n");
     print_chunk(encrypted);
-    printf("Encryption LS_asm speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    printf("Encryption KUZNECHICK_ASM speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
 
 }
 
