@@ -5,7 +5,7 @@ set(CMAKE_C_STANDARD 11)
 
 enable_language(ASM_NASM)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Ofast -march=native -mavx2 -mfma")
-set(CMAKE_ASM_NASM_FLAGS "-f win64 -g")  # Использование флагов для поддержки SSE и AVX
+set(CMAKE_ASM_NASM_FLAGS "-f win64 -O3 -g")
 set(SOURCES
         MGM.c
         Kuznechik.c

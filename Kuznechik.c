@@ -400,9 +400,10 @@ void write_galois_multiplication_table(const char *filename, uint8_t table[FIELD
 //     printf("Decryption speed: %.6f MB/sec\n", (enc_dec_times * KUZNECHIK_BLOCK_SIZE) / elapsed_time / 1024 / 1024);
 //     return 0;
 // }
-extern void kyznechick_asm(chunk *round_keys, chunk in, chunk out);
 
-void test_ls() {
+
+
+void test_asm() {
     generate_LUT();
     uint8_t key[] = {
         0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
@@ -439,13 +440,23 @@ void test_ls() {
     memcpy(encrypted, data, sizeof(chunk));
     start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
-        kyznechick_asm(round_keys, (void *) encrypted, encrypted);
+        kyznechick_asm_133(round_keys, (void *) encrypted, encrypted);
     }
     end_time = clock();
     elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
     printf("Encoded text:\n");
     print_chunk(encrypted);
-    printf("Encryption KUZNECHICK_ASM speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    printf("Encryption KUZNECHICK_ASM133 speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
+    memcpy(encrypted, data, sizeof(chunk));
+    start_time = clock();
+    for (int i = 0; i < enc_dec_times; i++) {
+        kyznechick_asm_152(round_keys, (void *) encrypted, encrypted);
+    }
+    end_time = clock();
+    elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;
+    printf("Encoded text:\n");
+    print_chunk(encrypted);
+    printf("Encryption KUZNECHICK_ASM_152 speed: %.6f MB/sec\n",  (enc_dec_times*KUZNECHIK_BLOCK_SIZE)/elapsed_time/1024/1024);
 
 }
 

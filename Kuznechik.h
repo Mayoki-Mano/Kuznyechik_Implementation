@@ -35,8 +35,10 @@ void kuznechik_decrypt(chunk *round_keys, chunk in, chunk out);
 void print_chunk(chunk p);
 void print(uint8_t *p, int size);
 void aligned_load_array_to_L1(int *arr, size_t size);
-void test_ls();
-void kyznechick_asm(chunk *round_keys, chunk in, chunk out);
+void test_asm();
+extern void kyznechick_asm_152(chunk *round_keys, chunk in, chunk out);
+extern void kyznechick_asm_fast(chunk *round_keys, chunk in, chunk out);
+extern void kyznechick_asm_133(chunk *round_keys, chunk in, chunk out);
 
 
 #endif //KUZNECHIK_H

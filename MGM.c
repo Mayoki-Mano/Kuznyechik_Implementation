@@ -314,5 +314,5 @@ void tests() {
 
 int main() {
     // tests();
-    test_ls();
+    test_asm();
 }
