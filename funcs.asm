@@ -28,6 +28,7 @@ kyznechick_asm_152:
     push rdi
     ; Загрузка входных данных (16 байт)
     movaps xmm0, [rdx]      ; xmm0 <- in
+    movaps xmm5, [rel mask]       ; xmm5 <- mask
     mov r11, LS_mat         ; r11 <- LS_mat
     mov r10, r11            ; r10 <- LS_mat
     add r11, 4096             ; r11 <- LS_mat[1]
@@ -49,17 +50,12 @@ kyznechick_asm_152:
     add r11, 4096             ; r11 <- LS_mat[9]
     mov rbx, r11            ; rbx <- LS_mat[9]
     add r11, 4096             ; r11 <- LS_mat[10]
-    lea r9, [rel mask]      ; r9 <- &mask
-    movaps xmm5, [r9]       ; xmm5 <- mask
-    mov r9, rcx             ; r9 <- указатель на round_keys
-    ; Основной цикл раундов (9 итераций)
-    mov ecx, 9              ; Количество раундов (9 для "Кузнечика")
+    mov r9, r11             ; r9 <- LS_mat[10]
+    add r11, 4096             ; r11 <- LS_mat[11]
 
-
-round_loop:
-    ; Применение раундового ключа
-    pxor xmm0, [r9]         ; xmm0 <- in ^ round_keys[i]
-    add r9, 16              ; Переход к следующему раундовому ключу
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
 
     ; Разделение байтов на чётные и нечётные
     movaps xmm3, xmm5       ; xmm3 <- mask
@@ -112,40 +108,646 @@ round_loop:
 
     ; Байт 10 (чётный)
     pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
-    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
 
     ; Байт 11 (нечётный)
     pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
-    add r11, 4096
     pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
 
     ; Байт 12 (чётный)
     pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
-    add r11, 4096
-    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
 
     ; Байт 13 (нечётный)
     pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
-    add r11, 4096
-    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
 
     ; Байт 14 (чётный)
     pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
-    add r11, 4096
-    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
 
     ; Байт 15 (нечётный)
     pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
-    add r11, 4096
-    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
 
-    sub r11, 20480          ; r11 <- LS_mat
-    ; Следующий раунд
-    dec ecx                 ; Уменьшаем счётчик раундов
-    jnz round_loop          ; Если ecx != 0, продолжаем цикл
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
+    ; Основной цикл раундов
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[i]
+    add rcx, 16              ; Переход к следующему раундовому ключу
+
+    ; Разделение байтов на чётные и нечётные
+    movaps xmm3, xmm5       ; xmm3 <- mask
+    movaps xmm2, xmm5       ; xmm2 <- mask
+    pandn xmm2, xmm0        ; xmm2 <- чётные байты in
+    pand xmm3, xmm0         ; xmm3 <- нечётные байты in
+    psllw xmm2, 4           ; xmm2 <- умножение чётных байтов на 16
+    psrlw xmm3, 4           ; xmm3 <- умножение нечётных байтов на 16
+
+    ; Обработка всех 16 байтов (развёрнутый цикл)
+    ; Байт 0 (чётный)
+    pextrw eax, xmm2, 0      ; eax <- in_out[0] * 16
+    movaps xmm0, [r10 + rax]         ; xmm0 <- xmm0 ^ LS_mat[0][in_out[0]]
+
+    ; Байт 1 (нечётный)
+    pextrw eax, xmm3, 0      ; eax <- in_out[1] * 16
+    pxor xmm0, [rdx+rax]         ; xmm0 <- xmm0 ^ LS_mat[1][in_out[1]]
+
+    ; Байт 2 (чётный)
+    pextrw eax, xmm2, 1      ; eax <- in_out[2] * 16
+    pxor xmm0, [r12+rax]         ; xmm0 <- xmm0 ^ LS_mat[2][in_out[2]]
+
+    ; Байт 3 (нечётный)
+    pextrw eax, xmm3, 1      ; eax <- in_out[3] * 16
+    pxor xmm0, [r13+rax]         ; xmm0 <- xmm0 ^ LS_mat[3][in_out[3]]
+
+    ; Байт 4 (чётный)
+    pextrw eax, xmm2, 2      ; eax <- in_out[4] * 16
+    pxor xmm0, [r14+rax]         ; xmm0 <- xmm0 ^ LS_mat[4][in_out[4]]
+
+    ; Байт 5 (нечётный)
+    pextrw eax, xmm3, 2      ; eax <- in_out[5] * 16
+    pxor xmm0, [r15+rax]         ; xmm0 <- xmm0 ^ LS_mat[5][in_out[5]]
+
+    ; Байт 6 (чётный)
+    pextrw eax, xmm2, 3      ; eax <- in_out[6] * 16
+    pxor xmm0, [rsi+rax]         ; xmm0 <- xmm0 ^ LS_mat[6][in_out[6]]
+
+    ; Байт 7 (нечётный)
+    pextrw eax, xmm3, 3      ; eax <- in_out[7] * 16
+    pxor xmm0, [rdi+rax]         ; xmm0 <- xmm0 ^ LS_mat[7][in_out[7]]
+
+    ; Байт 8 (чётный)
+    pextrw eax, xmm2, 4      ; eax <- in_out[8] * 16
+    pxor xmm0, [rbp+rax]         ; xmm0 <- xmm0 ^ LS_mat[8][in_out[8]]
+
+    ; Байт 9 (нечётный)
+    pextrw eax, xmm3, 4      ; eax <- in_out[9] * 16
+    pxor xmm0, [rbx+rax]         ; xmm0 <- xmm0 ^ LS_mat[9][in_out[9]]
+
+    ; Байт 10 (чётный)
+    pextrw eax, xmm2, 5      ; eax <- in_out[10] * 16
+    pxor xmm0, [r9+rax]         ; xmm0 <- xmm0 ^ LS_mat[10][in_out[10]]
+
+        ; Байт 11 (нечётный)
+    pextrw eax, xmm3, 5      ; eax <- in_out[11] * 16
+    pxor xmm0, [r11+rax]         ; xmm0 <- xmm0 ^ LS_mat[11][in_out[11]]
+
+    ; Байт 12 (чётный)
+    pextrw eax, xmm2, 6      ; eax <- in_out[12] * 16
+    pxor xmm0, [r11+rax+01000h]         ; xmm0 <- xmm0 ^ LS_mat[12][in_out[12]]
+
+    ; Байт 13 (нечётный)
+    pextrw eax, xmm3, 6      ; eax <- in_out[13] * 16
+    pxor xmm0, [r11+rax+02000h]         ; xmm0 <- xmm0 ^ LS_mat[13][in_out[13]]
+
+    ; Байт 14 (чётный)
+    pextrw eax, xmm2, 7      ; eax <- in_out[14] * 16
+    pxor xmm0, [r11+rax+03000h]         ; xmm0 <- xmm0 ^ LS_mat[14][in_out[14]]
+
+    ; Байт 15 (нечётный)
+    pextrw eax, xmm3, 7      ; eax <- in_out[15] * 16
+    pxor xmm0, [r11+rax+04000h]         ; xmm0 <- xmm0 ^ LS_mat[15][in_out[15]]
+
 
     ; Финальный раунд (последний XOR с раундовым ключом)
-    pxor xmm0, [r9]         ; xmm0 <- in ^ round_keys[9]
+    pxor xmm0, [rcx]         ; xmm0 <- in ^ round_keys[9]
     movaps [r8], xmm0      ; Сохранение результата в out
     pop rdi
     pop rsi
