@@ -17,7 +17,7 @@ extern LS_mat               ; Объявляем глобальный масси
 ;   rcx - round_keys (chunk *) - a pointer to the round keys
 ;   rdx - in (chunk) - a pointer to the input data
 ;   r8 - out (chunk) - a pointer to the output data
-kyznechick_asm_152:
+kyznechick_asm_158:
     ; Загрузка входных данных (16 байт)
     movaps xmm0, [rdx]      ; xmm0 <- in
     movaps xmm5, [rel mask] ; xmm5 <- mask
