@@ -291,7 +291,6 @@ void aligned_load_array_to_L1(int *arr, size_t size) {
         _mm_prefetch((const char*)&arr[i], _MM_HINT_T0);  // Подгрузка в L1
 }
 
-extern void LS_asm(uint8_t *in_out);
 
 // Функция шифрования
 // Поддерживает запись результата в исходный массив
@@ -427,7 +426,7 @@ void test_asm() {
     chunk encrypted;
     memcpy(encrypted, data, sizeof(chunk));
 
-    int enc_dec_times = 100000000;
+    int enc_dec_times = 10000000;
     clock_t start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
         kuznechik_encrypt(round_keys, (void *) encrypted, encrypted);
@@ -450,7 +449,7 @@ void test_asm() {
     memcpy(encrypted, data, sizeof(chunk));
     start_time = clock();
     for (int i = 0; i < enc_dec_times; i++) {
-        kyznechick_asm_152(round_keys, (void *) encrypted, encrypted);
+        kyznechick_asm_158(round_keys, (void *) encrypted, encrypted);
     }
     end_time = clock();
     elapsed_time = (double) (end_time - start_time) / CLOCKS_PER_SEC;

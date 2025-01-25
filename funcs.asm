@@ -5,7 +5,7 @@ section .bss
 
 section .text
 global LS_asm                   ; Объявляем функцию LS как глобальную
-global kyznechick_asm_152
+global kyznechick_asm_158
 global kyznechick_asm_fast
 global kyznechick_asm_133
 
